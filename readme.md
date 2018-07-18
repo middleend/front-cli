@@ -1,3 +1,8 @@
+Links para acomodar!!
+
+* http://www.restapitutorial.com/
+
+
 # Middleend: wp-cli.jsx
 
 En este presentación veremos una manera de poder administrar nuestros sitios WordPress, y otros recursos en general, en un punto medio ubicado entre el backend y el frontend: el middleend.
