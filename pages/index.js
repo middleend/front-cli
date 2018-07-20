@@ -1,5 +1,5 @@
 import React, { Component } from 'react';
-import FrontCLI from '../components/front-cli';
+import WPCLI from '../components/wp-cli';
 
 class App extends Component {
 	showMsg = () => 'Hello World'
@@ -7,14 +7,14 @@ class App extends Component {
 	render() {
 		return (
 			<div
-				style={{
+				style={ {
 					display: "flex",
 					justifyContent: "center",
 					alignItems: "center",
 					height: "100vh"
-				}}
+				} }
 			>
-				<FrontCLI />
+				<WPCLI />
 			</div>
 		);
 	}
