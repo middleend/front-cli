@@ -5,15 +5,12 @@ const bodyParser = require('koa-body');
 const Router = require('koa-router');
 const fetch = require('isomorphic-unfetch');
 
-const config = {
-	port: 3000,
-	host: 'localhost',
-}
-
+const config = require('./config');
 const dev = process.env.NODE_ENV !== 'production'
 const app = next({ dev })
 const defaultHandler = app.getRequestHandler()
 
+const generateCommandsFromEndpoints = require('./builder').generateCommandsFromEndpoints;
 
 app.prepare().then(() => {
 	const server = new Koa();
@@ -21,6 +18,22 @@ app.prepare().then(() => {
 
 	server.proxy = true
 	server.use(bodyParser());
+
+
+	router.get('/api/:namespace/:version/generate', async context => {
+		const { res, params, query } = context;
+
+		// if (typeof handler === 'function') {
+		result = await fetch( `https://public-api.wordpress.com/${params.namespace}/${params.version}/` )
+			.then( resp => resp.json() )
+			.catch( err => err );
+
+		context.body = result;
+
+		generateCommandsFromEndpoints( result );
+
+		context.respond = true
+	})
 
 	router.get('/api/:namespace/:version/', async context => {
 		const { res, params, query } = context;
