@@ -1,28 +1,32 @@
 const fs = require('fs');
 const camelcase = require('camelcase');
 
+
+const _log = message => {
+	console.log( message )
+};
+
 module.exports.generateCommandsFromEndpoints = function( data ) {
 	console.log( {data} );
 
 	var namespace = data.namespace;
 	var routes = data.routes;
 
-	console.log( {namespace} );
-	console.log( {routes} );
-
 	const modules = [];
-	const classNames = [];
+	const functionsNames = [];
+	const commandKeys = [];
 
 	for (var name in routes) {
-		console.log( {name} );
 		var endpoint = name.substr( ( '/' + namespace ).length );
-		console.log( {endpoint} );
 
 		// get commands and values from endpoint
 		var part = endpoint.split( '/' );
 		var filename = `${ namespace }`;
+		var cmdKey = 'cmd_';
 		var cmdStructure = {};
 		var commandPath = '>';
+		var endpointRexExp = '';
+		var mapObject = '{\n';
 
 		for (var i = 0; i < part.length; i++) {
 			var v = part[i];
@@ -32,16 +36,23 @@ module.exports.generateCommandsFromEndpoints = function( data ) {
 
 			var entity;
 			if ( ! ( /^\(/.test( v ) ) ) {
-				filename += '_' + v;
+				filename += '-' + v;
+				cmdKey += '_' + v;
 				cmdStructure[ v ] = {};
 				entity = v;
 				commandPath += ' ' + v;
+				endpointRexExp += '/' + v;
 			} else {
 				var entityStructure = v.match( /\(\?P\<([a-z\-\_]+)\>\[(.+)\]/i );
 				if ( entityStructure.length > 1 ) {
 					cmdStructure[ entity ]['id'] = entityStructure[1];
 					cmdStructure[ entity ]['regexp'] = entityStructure[2];
 					commandPath += ` <${ entityStructure[1] }>`;
+					endpointRexExp += `/${ entityStructure[1] }`;
+
+					filename += '-' + entityStructure[1];
+					mapObject += `\t\t${ entityStructure[1] }: args[${ i/2 - 1 }],\n`
+					cmdKey += '_value';
 				}
 				else {
 					cmdStructure[ entity ]['value'] = v;
@@ -50,20 +61,21 @@ module.exports.generateCommandsFromEndpoints = function( data ) {
 			}
 		}
 
-		console.log( {cmdStructure} );
+		mapObject += '\t}';
 
 		var route = routes[name];
-		console.log( {route} );
+		filename = filename.replace( /\//g, '-' );
+		cmdKey = cmdKey.replace( /\//g, '-' );
 
-		
-		filename = filename.replace( /\//g, '_' );
 		modules.push( filename );
+		commandKeys.push( cmdKey );
 
-		var className = camelcase( filename + '_command' );
-		classNames.push( className );
+		var functionName = camelcase( filename + '_command' );
+		functionsNames.push( functionName );
 
-		filename = `gen_${ filename }.js`;
+		filename = `gen-${ filename }.js`;
 
+		const date = new Date();
 		let sourceCode =
 `
 /**
@@ -71,32 +83,39 @@ module.exports.generateCommandsFromEndpoints = function( data ) {
  *
  * namespace/version: ${namespace}
  * endpoint: ${ endpoint }
+ * created at: ${ date.toISOString() }
  *
  * ${ commandPath }
  */
 
-class ${ className } {
-	constructor( ) {
-		this.description = 'Run ${ commandPath }';
-		this.actions = ['show'];
-		this.defaultAction = 'show';
-	}
+export default {
+	description: '${ commandPath }',
+	exec: ( args, print, runCmd ) => {
 
-	exec = ( args, print, runCmd ) => {
-		console.log( args );
+		const mapObject = ${ mapObject };
+
+		const endpoint_base = 'https://public-api.wordpress.com/wp/v2${ endpointRexExp }';
+		const re = new RegExp(Object.keys(mapObject).join("|"),"gi");
+		const endpoint = endpoint_base.replace(re, matched => mapObject[matched.toLowerCase()]);
+
+		fetch( endpoint )
+			.then( resp => {
+				const promise = resp.json();
+
+				promise
+					.then( data => print( JSON.stringify( data, undefined, 2 ) ) )
+					.catch( console.error );
+
+			} )
+			.catch(console.error);
+
 	}
 }
-
-export default () => {
-
-};
 `;
-		console.log( {filename} );
-
 		fs.writeFile( `./builder/generate/${ filename }`, sourceCode, (err) => {  
 			if (err) throw err;
 
-			console.log( `${ filename } saved.` );
+			_log( `${ filename } saved.` );
 		});
 	}
 
@@ -111,17 +130,25 @@ export default () => {
 `;
 
 for (var i = 0; i < modules.length; i++) {
-	mainModulerSource += 'import ' + classNames[i] + ' from \'' + modules[i] + '\';\n';
+	mainModulerSource += 'import ' + functionsNames[i] + ' from \'./gen-' + modules[i] + '\';\n';
 }
 
 mainModulerSource += `
-export default {};
+export default {
 `;
+
+for (var i = 0; i < commandKeys.length; i++) {
+	mainModulerSource += `\t${ commandKeys[i] }: ${ functionsNames[i] },\n`;
+}
+
+mainModulerSource += `};
+`
+;
 
 
 	fs.writeFile( `./builder/generate/index.js`, mainModulerSource, (err) => {
 		if (err) throw err;
 
-		console.log( `index.js saved.` );
+		_log( 'index.js saved.' );
 	} );
 }
